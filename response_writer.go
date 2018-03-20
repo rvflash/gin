@@ -16,27 +16,32 @@ const (
 	defaultStatus = 200
 )
 
+// ResponseWriter is used by an Gin HTTP handler to
+// construct an HTTP response.
 type ResponseWriter interface {
-	http.ResponseWriter
-	http.Hijacker
-	http.Flusher
 	http.CloseNotifier
+	http.Flusher
+	http.Hijacker
+	http.ResponseWriter
 
-	// Returns the HTTP response status code of the current request.
-	Status() int
+	// Pusher returns the http.Pusher for server push if it supported.
+	Pusher() (http.Pusher, bool)
 
-	// Returns the number of bytes already written into the response http body.
+	// Size returns the number of bytes already written into the response http body.
 	// See Written()
 	Size() int
 
-	// Writes the string into the response body.
+	// Status returns the HTTP response status code of the current request.
+	Status() int
+
+	// WriteHeaderNow forces to write the http header (status code + headers).
+	WriteHeaderNow()
+
+	// WriteString writes the string into the response body.
 	WriteString(string) (int, error)
 
-	// Returns true if the response body was already written.
+	// Written returns true if the response body was already written.
 	Written() bool
-
-	// Forces to write the http header (status code + headers).
-	WriteHeaderNow()
 }
 
 type responseWriter struct {
@@ -53,6 +58,7 @@ func (w *responseWriter) reset(writer http.ResponseWriter) {
 	w.status = defaultStatus
 }
 
+// WriteHeader implements the ResponseWriter interface.
 func (w *responseWriter) WriteHeader(code int) {
 	if code > 0 && w.status != code {
 		if w.Written() {
@@ -62,6 +68,7 @@ func (w *responseWriter) WriteHeader(code int) {
 	}
 }
 
+// WriteHeaderNow implements the ResponseWriter interface.
 func (w *responseWriter) WriteHeaderNow() {
 	if !w.Written() {
 		w.size = 0
@@ -69,6 +76,7 @@ func (w *responseWriter) WriteHeaderNow() {
 	}
 }
 
+// Write implements the ResponseWriter interface.
 func (w *responseWriter) Write(data []byte) (n int, err error) {
 	w.WriteHeaderNow()
 	n, err = w.ResponseWriter.Write(data)
@@ -76,6 +84,7 @@ func (w *responseWriter) Write(data []byte) (n int, err error) {
 	return
 }
 
+// WriteString implements the ResponseWriter interface.
 func (w *responseWriter) WriteString(s string) (n int, err error) {
 	w.WriteHeaderNow()
 	n, err = io.WriteString(w.ResponseWriter, s)
@@ -83,14 +92,17 @@ func (w *responseWriter) WriteString(s string) (n int, err error) {
 	return
 }
 
+// Status implements the ResponseWriter interface.
 func (w *responseWriter) Status() int {
 	return w.status
 }
 
+// Size implements the ResponseWriter interface.
 func (w *responseWriter) Size() int {
 	return w.size
 }
 
+// Written implements the ResponseWriter interface.
 func (w *responseWriter) Written() bool {
 	return w.size != noWritten
 }
@@ -111,4 +123,10 @@ func (w *responseWriter) CloseNotify() <-chan bool {
 // Flush implements the http.Flush interface.
 func (w *responseWriter) Flush() {
 	w.ResponseWriter.(http.Flusher).Flush()
+}
+
+// Pusher returns the http.Pusher interface.
+func (w *responseWriter) Pusher() (pusher http.Pusher, ok bool) {
+	pusher, ok = w.ResponseWriter.(http.Pusher)
+	return
 }
